@@ -94,6 +94,59 @@ function asParsable(rec) {
   ].join("\n");
 }
 
+/**
+ * Lofty's "Create Lead" action, pre-mapped.
+ *
+ * Field names and enum values below are the real ones from Lofty's Zapier
+ * action, so a Zap can map these one-to-one with no formatter steps. Two
+ * fields are deliberately absent because they are account-specific dropdowns
+ * you pick in Zapier: `group` (Segment) and `ownership` (Lead Ownership Level).
+ */
+const TIMEFRAME = {
+  "Right away — 0 to 3 months": "1-3",
+  "3 to 6 months": "3-6",
+  "6 to 12 months": "6-12",
+  "Just starting to look": "Just Looking"
+};
+
+function loftyMapping(rec) {
+  const parts = (rec.name || "").trim().split(/\s+/);
+  const firstName = parts.shift() || "";
+  const lastName = parts.join(" ") || firstName;
+  const selling = /^Yes/i.test(rec.home_to_sell || "");
+  const consented = rec.consent === true;
+
+  const note = [
+    rec.working_with_agent && "Working with an agent: " + rec.working_with_agent,
+    rec.financing && "Financing: " + rec.financing,
+    rec.timeline && "Timeline: " + rec.timeline,
+    rec.home_to_sell && "Home to sell: " + rec.home_to_sell,
+    rec.visiting && "Attending: " + rec.visiting,
+    rec.source && "Came from: " + rec.source,
+    rec.notes && "Said: " + rec.notes,
+    "Registered " + new Date(rec.submitted_at).toLocaleString("en-US", { timeZone: "America/New_York" }) + " ET"
+  ].filter(Boolean).join("\n");
+
+  return {
+    firstName,
+    lastName,
+    email: rec.email,
+    phone: rec.phone,
+    source: "Open House - 437 4th Ave Westwood",
+    leadType: selling ? "Seller" : "Buyer",
+    tag: "437 4th Ave Open House",
+    note,
+    cityForBuyer: "Westwood",
+    stateForBuyer: "NJ",
+    timeFrameForBuyer: TIMEFRAME[rec.timeline] || "",
+    // The consent checkbox on the form is the only thing that may switch these on.
+    callOptIn: consented ? "true" : "false",
+    textOptIn: consented ? "true" : "false",
+    emailOptIn: consented ? "true" : "false",
+    numberConsent: consented ? "USER_RECORDED" : "UNKNOWN_CONSENT"
+  };
+}
+
 async function sendEmail(key, from, to, subject, text, replyTo) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -153,7 +206,7 @@ module.exports = async (req, res) => {
       const r = await fetch(LEAD_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(rec)
+        body: JSON.stringify({ ...rec, lofty: loftyMapping(rec) })
       });
       if (!r.ok) throw new Error("Webhook " + r.status);
     })()]);
