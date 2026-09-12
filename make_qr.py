@@ -47,7 +47,7 @@ qr = segno.make(target, error="h")
 svg_path = os.path.join(OUT, "437-open-house-qr.svg")
 png_path = os.path.join(OUT, "437-open-house-qr.png")
 qr.save(svg_path, scale=12, border=3, dark="#16191B", light="#FFFFFF")
-qr.save(png_path, scale=24, border=3, dark="#16191B", light="#FFFFFF")
+qr.save(png_path, scale=42, border=3, dark="#16191B", light="#FFFFFF")
 
 # The sign embeds the SVG inline so the printed file needs no other assets.
 svg_markup = io.open(svg_path, encoding="utf-8").read()
