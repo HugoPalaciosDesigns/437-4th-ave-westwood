@@ -1,96 +1,128 @@
 # 437 4th Avenue, Westwood NJ — property site
 
-A single-page property site: hero, open-house times, photo gallery with lightbox,
-the barn feature, 3D Matterport tour, floor plans, payment estimates, neighborhood
-data, open-house registration, and an agent/funnel section.
+Open-house property site with a registration-gated buyer packet and lead capture
+that fans out to email and Lofty.
 
-Plain HTML, CSS and JavaScript. No build step, no dependencies, no framework.
-It will run from any static host, or straight off a USB stick.
+Plain HTML, CSS and JavaScript plus one serverless function. No build step, no
+framework, no dependencies. Runs on any static host; the `/api` route needs
+Vercel (or any Node serverless host).
 
 ```
-site/
-  index.html          the page (source of truth)
-  styles.css          design tokens + all styling; light and dark themes
-  app.js              gallery, lightbox, plan tabs, tour, form  ← CONFIG is at the top
-  img/
-    hero.jpg          virtual twilight exterior (hero)
-    hero-day.jpg      daylight exterior (spare hero)
-    full/01–34.jpg    1700px gallery images
-    thumb/01–34.jpg   760px grid thumbnails
-    plan/*.jpg        first / second / basement / all
-    agent/hugo.jpg    headshot
-  build_artifact.py   regenerates build/artifact.html for publishing as a Claude Artifact
-  build/              generated — not edited by hand
+index.html          the page (source of truth)
+styles.css          design tokens + all styling; light and dark themes
+app.js              gallery, lightbox, packet unlock, form   ← CONFIG at the top
+api/register.js     lead intake: webhook + email + Lofty fan-out
+vercel.json         headers and caching
+docs/               the 7 buyer-packet PDFs
+img/                hero, 34 gallery photos (full + thumb), floor plans, headshot
+qr/                 generated QR code and printable sign
+make_qr.py          regenerates qr/ for a given URL
+build_artifact.py   regenerates build/artifact.html for publishing as an Artifact
 ```
 
-## 1. Make the registration form deliver
+## 1. Lead delivery — pick one of two paths
 
-Out of the box the form works with **no backend**: every registration is saved in the
-visitor's browser and a pre-filled email to `hugopalacios@kw.com` opens for them to
-send. That is a safety net, not a system — it depends on the visitor pressing send.
+Both are built. **A** needs no server and works anywhere. **B** keeps everything
+on your own domain. You can run both.
 
-To capture leads properly, open `app.js` and set one value on line ~18:
+### A. Direct webhook (simplest, recommended)
 
-```js
-const FORM_ENDPOINT = "https://formspree.io/f/xxxxxxxx";
-```
+One Zapier Zap sends the lead to your inbox *and* creates the Lofty lead.
 
-Any service that accepts a JSON `POST` works. The fastest is
-[Formspree](https://formspree.io) — free tier, about two minutes:
+1. In Zapier, create a Zap. Trigger: **Webhooks by Zapier → Catch Hook**. Copy
+   the hook URL it gives you.
+2. Action 1: **Lofty → Create Lead**. Map `name`, `email`, `phone`, and put the
+   rest in the notes/comments field.
+3. Action 2: **Gmail → Send Email** to yourself, so you get it on your phone
+   while you are still standing at the door.
+4. Open `app.js` and paste the hook URL on line ~17:
 
-1. Sign up, create a form, choose **437 4th Ave — Open House**.
-2. Copy the endpoint URL it gives you.
-3. Paste it as `FORM_ENDPOINT` and re-upload `app.js`.
+   ```js
+   const WEBHOOK_URL = "https://hooks.zapier.com/hooks/catch/000000/abcdef/";
+   ```
 
-Registrations then arrive in your inbox and in the Formspree dashboard, and the
-visitor sees a clean "You're registered" confirmation instead of an email draft.
+5. Commit and push. Vercel redeploys on push.
 
-Alternatives that work identically: Getform, Basin, Web3Forms, or a Google Apps
-Script web app writing rows into a Google Sheet.
+### B. The serverless route
+
+Leave `WEBHOOK_URL` empty and the form posts to `/api/register`, which fans the
+lead out to whichever of these you set in **Vercel → Project → Settings →
+Environment Variables**. Every one is optional and independent:
+
+| Variable | What it does |
+| --- | --- |
+| `LEAD_WEBHOOK_URL` | Forwards the full JSON record. Point it at the same Zapier catch hook as above. |
+| `RESEND_API_KEY` | API key from resend.com — switches on the two email channels. |
+| `LEAD_EMAIL_TO` | Where your notification lands, e.g. `HugoPalacios@kw.com`. |
+| `LEAD_EMAIL_FROM` | Verified sender. Defaults to Resend's shared test sender, which can only deliver to the Resend account's own address — set a real one once your domain is verified. |
+| `LOFTY_PARSE_EMAIL` | Lofty's lead-parsing inbox, if your account has one. Gets a second copy formatted as `Label: value` lines for the parser. |
+
+### If nothing is configured
+
+The form still works and still validates. The visitor's packet unlocks, the
+registration is saved on their device, and a pre-filled email to you opens for
+them to send. Every registration is also written to the Vercel runtime log, so
+it is recoverable. **A lead is never silently dropped** — but until you finish
+step A or B above, delivery depends on the visitor pressing send.
 
 ### The door sign-in sheet
 
-Every registration is also stored on the device that submitted it. On the iPad or
-phone you hand people at the door, open the site with `#signins` on the end of the
-URL — e.g. `https://…/#signins` — to see everyone who signed in on that device and
-download them as a CSV.
+Registrations are also stored on the device that submitted them. On the iPad or
+phone you hand people at the door, open the site with `#signins` on the end of
+the URL to list everyone who signed in on that device and export them as CSV.
 
-## 2. Publish it
+## 2. The QR code
 
-Any static host. The whole folder is ~10 MB.
+```bash
+python make_qr.py https://your-real-url.com
+```
 
-| Host | How |
-| --- | --- |
-| **Vercel** | Drag the `site` folder onto vercel.com/new, or `vercel --prod` inside it |
-| **Netlify** | Drag the `site` folder onto app.netlify.com/drop |
-| **Cloudflare Pages** | Upload the folder as a direct-upload project |
-| **GitHub Pages** | Commit `site/` and enable Pages on that folder |
+Writes `qr/437-open-house-qr.svg` (use for print), `qr/437-open-house-qr.png`
+(social, slides, MLS) and `qr/437-open-house-sign.html` — open that and print to
+PDF, US Letter portrait.
 
-A short custom domain reads much better on a QR code and a yard sign — something
-like `437fourth.com` or `westwoodbarnhouse.com`.
+The code encodes `/?src=qr#register`, so a scan lands straight on the form and
+that lead arrives tagged `qr`, separate from social traffic. **Re-run this any
+time the site URL changes**, including when you add a custom domain.
 
-## 3. Before it goes public — check these
+Requires `pip install segno`.
 
-- [ ] **Broker compensation.** The open-house card states *2.0% − $300*, taken from
-      your agent info sheet. Confirm you want that figure on a page buyers can read;
-      if not, delete that `<span class="note">` line in `index.html`.
-- [ ] **Disclosures.** The site *promises* the seller's disclosure and lead-paint
-      disclosure on request; it does not host them. Those PDFs carry the seller's
-      name and signature, so they are handled by you, not posted.
-- [ ] **Twilight photo.** Disclosed in the footer as virtually enhanced, per MLS rules.
-- [ ] **Financing numbers.** Dated 9/9/2026 in the copy. Refresh the rates, or drop
-      the section, once they are stale.
-- [ ] **School ratings.** Third-party, presented as data with a "verify with the
-      district" note — keep that note.
-- [ ] **Brokerage compliance.** Run the page past your broker for the required KW
-      branding, license number and any state-specific disclosure your office wants.
+## 3. How the gate works
 
-## 4. Editing
+The property page is fully public — photos, story, 3D tour, floor plans,
+payment estimates, neighborhood — so it previews properly when shared on
+social. Only the **buyer packet** (7 PDFs) is gated. Registering unlocks it and
+the unlock is remembered on that device.
 
-- **Photo captions and ordering** — the `PHOTOS` array at the top of `app.js`.
-  `g` is the filter group, `c` is the caption, `feature: true` makes it span two
-  columns in the grid.
+This is a lead gate, not security. The PDFs sit at ordinary public URLs under
+`/docs/`; someone determined can reach them directly. That is the normal
+trade-off for an open-house funnel — the gate captures the 95% who play along
+without breaking sharing or SEO.
+
+## 4. Before more traffic hits it
+
+- [ ] **Broker compensation.** The open-house card states *2.0% − $300*, from
+      your agent info sheet. That figure is normally agent-facing — delete that
+      `<span class="note">` line in `index.html` if you don't want it public.
+- [ ] **Financing numbers** are dated 9/9/2026. Refresh or remove when stale.
+- [ ] **Twilight photo** is disclosed in the footer as virtually enhanced.
+- [ ] **School ratings** are third-party, shown as data with a "verify with the
+      district" note. Keep that note.
+- [ ] **Broker review.** Licenses (NJ 2078904 / NY 10401401027), the office
+      address and Equal Housing are on the page; have your office confirm it
+      meets KW's branding and NJ advertising rules.
+- [ ] **Social links.** LinkedIn / Facebook / Instagram are not on the page yet
+      — no URLs were supplied.
+- [ ] **Logos.** The KW Luxury, HPG and NJ REALTORS award marks aren't included;
+      the award is rendered typographically. Drop the image files in `img/` to
+      swap them in.
+
+## 5. Editing
+
+- **Photo captions and order** — the `PHOTOS` array at the top of `app.js`.
+  `g` is the filter group, `c` the caption, `feature: true` spans two columns.
+- **Packet documents** — the `DOCS` array in `app.js`, files in `docs/`.
 - **Colors and type** — the `:root` token block at the top of `styles.css`.
-  Change a token once and it updates everywhere, in both light and dark themes.
+  Change a token once and it updates everywhere, in both themes.
 - **Open house dates** — the three `.oh-card` blocks in `index.html`. The
-  `data-end` timestamp on each greys the card out automatically once it has passed.
+  `data-end` timestamp greys each card out automatically once it has passed.

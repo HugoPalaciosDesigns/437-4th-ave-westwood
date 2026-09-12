@@ -1,0 +1,6 @@
+# Local tooling — never part of the public site
+make_qr.py
+build_artifact.py
+build/
+README.md
+.claude/
