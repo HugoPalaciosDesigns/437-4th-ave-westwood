@@ -36,10 +36,11 @@ io.open(OUT, "w", encoding="utf-8").write(
 # Manifest of every supporting file the page references, as
 # {published path: source path} for the Artifact tool's `files` argument.
 files = {"styles.css": "styles.css", "app.js": "app.js"}
-for root, _dirs, names in os.walk(os.path.join(HERE, "img")):
-    for n in sorted(names):
-        rel = os.path.relpath(os.path.join(root, n), HERE).replace("\\", "/")
-        files[rel] = rel
+for sub in ("img", "docs"):
+    for root, _dirs, names in os.walk(os.path.join(HERE, sub)):
+        for n in sorted(names):
+            rel = os.path.relpath(os.path.join(root, n), HERE).replace("\\", "/")
+            files[rel] = rel
 
 io.open(os.path.join(OUT_DIR, "files.json"), "w", encoding="utf-8").write(
     json.dumps(files, indent=1)

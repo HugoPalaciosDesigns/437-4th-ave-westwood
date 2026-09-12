@@ -13,6 +13,12 @@
    Add "#signins" to the URL to review and export every registration collected
    on this device as a CSV.
    ------------------------------------------------------------------------- */
+/* WEBHOOK_URL — paste a Zapier "Catch Hook" URL here and every registration
+   posts straight to it from the browser, with no server involved. That is the
+   Lofty path: one Zap, two actions (Gmail -> you, Lofty -> create the lead).
+   Works on any host, including static ones. Leave it empty to use the
+   /api/register serverless function instead (Vercel only). */
+const WEBHOOK_URL   = "";
 const API_ENDPOINT  = "/api/register";
 const AGENT_EMAIL   = "hugopalacios@kw.com";
 const AGENT_PHONE   = "973-670-7046";
@@ -415,6 +421,18 @@ function mailtoFor(rec) {
 }
 
 async function postLead(rec) {
+  if (WEBHOOK_URL) {
+    // Zapier catch hooks accept a cross-origin POST and answer with CORS
+    // headers, so this works from any host without a server of our own.
+    const r = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rec)
+    });
+    if (!r.ok) throw new Error("Webhook returned " + r.status);
+    return true;
+  }
+
   const res = await fetch(API_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
